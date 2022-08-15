@@ -1,0 +1,860 @@
+---
+title: "Final Exam"
+author: "Boran Sheu & Noah Shimizu"
+date: '2022-08-05'
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+**GitHub Link to RMD File**: 
+
+## Probability Practice
+
+Part A:
+Rule of Total Probability: P(A)=P(Y1)*P(Q1|Y1)+P(Y2)*P(Q2|Y2)
+
+Let P(Y) as 65%, P(Q1|Y1)=0.5(Random clickers would click either one with equal probability) and P(Y1)=0.3
+0.65=0.3*0.5+0.7*P(Q2|Y2)
+P(Q2|Y2)=5/7
+
+Par B: Let's use the Bayes Rule
+We are finding P(D|p)=P(D,p)/P(p)
+
+What is the possibility that someone tests positive-->
+0.000025*0.993+(1-0.000025)*0.0001
+=0.0001248225=P(p)
+0.000025=P(D)
+What is the possibility that someone tests positive and has the disease-->
+P(D,p)=P(D)*P(p)=
+0.000025*0.0001248225=3.120563e-09
+
+
+P(D|p)=P(D,p)/P(p)=
+3.120563e-09/0.0001248225=
+2.5e-05 
+
+## Wrangling the Billboard Top 100
+
+
+## green buildings
+
+**No** we do not agree with the inference of the stat-guru.
+
+While the guru's explanation sounds logical, the guru relies heavily on the assumption that the _green rating_ of a building is the sole driver behind the rent of a property.
+
+A simple linear regression run on the rent premium against green building indicates that it (Class-A rating) is statistically very signficant.
+
+```{r, echo=FALSE}
+
+#---- Question - 1 ----
+file <- "https://raw.githubusercontent.com/jgscott/STA380/master/data/greenbuildings.csv"
+gbuilds <- read.csv(file)
+
+#View(gbuilds)
+# Data conversion
+gbuilds$cluster <- as.factor(gbuilds$cluster) # 693 clusters numbered randomly
+gbuilds$renovated <- as.factor(gbuilds$renovated)
+gbuilds$class_a <- as.factor(gbuilds$class_a)
+gbuilds$class_b <- as.factor(gbuilds$class_b)
+gbuilds$LEED <- as.factor(gbuilds$LEED)
+gbuilds$Energystar <- as.factor(gbuilds$Energystar)
+gbuilds$green_rating <- as.factor(gbuilds$green_rating)
+gbuilds$net <- as.factor(gbuilds$net)
+gbuilds$amenities <- as.factor(gbuilds$amenities)
+attach(gbuilds)
+slinreg <- lm(Rent-cluster_rent~green_rating, data = gbuilds)
+summary(slinreg)$coefficients
+```
+
+**Coefficient of Green_Rating: 2.4125; P-Value: 8e-10**
+
+However, our model suffers from  an extremely high bias and has a very low R square. This is a clear indicator that our model is inadequate.
+
+Thus we try looking for confounding variables.
+
+```{r, echo=FALSE}
+confoundingParams <- colnames(gbuilds)[-c(5,12,13,14,23)]#"Rent","green_rating","LEED","Energystar", Cluster Rent)]
+significant <- NULL
+i <- 0
+for(col in confoundingParams)
+{
+  i <- i+1
+  cat(paste(i,") MLR, green-building rating with",col),": ")
+  mdl <- lm(paste("Rent-cluster_rent~ green_rating+",col), data = gbuilds)
+  smry <- summary(mdl)
+  pval <- smry$coefficients["green_rating1","Pr(>|t|)"]
+  
+  if(pval > 0.05)
+  {
+    cat("Confounding\n")
+    significant <- c(significant,col)
+  }
+  else
+  {
+    cat("Non Confounding\n")
+  }
+}
+```
+Therefore, It seems that whether a building is rated as a _**Class-A**_ listing is actually an underlying confounding variable with the _Rent_ and _Green Ratings_
+
+THis is not surprising since a _Class-A_ listing is the most desirable property and will be superior to its neighbourhood competition in terms of not only amenities and services but will also be technologically superior and therefore will have lower costs. All these factors will raise the price and also increase the chances that the property qualifies as a _Green_ building.
+```{r, echo=FALSE}
+mlr <- lm(Rent-cluster_rent~ green_rating+class_a, data = gbuilds)
+smry <- summary(mlr)
+smry$coefficients[,-4]
+detach("gbuilds")
+```
+The T-statistic shows that at a 95% confidence, _Green Rating_ is in fact not statistically significant in determining the rent!
+
+It is the Class-A rating which determines the rent instead!!
+
+```{r, echo=FALSE}
+library(readr)
+library(knitr)
+library(ggplot2)
+library(gridExtra)
+library(mosaic)
+library(MatchIt)
+library(cowplot)
+library(corrplot)
+options(scipen=999)
+file <- "https://raw.githubusercontent.com/jgscott/STA380/master/data/greenbuildings.csv"
+green <- read_csv(file)
+# Drop those with leasing rates < 10%
+green = green[green$leasing_rate >= 10,]
+# Define revenue per square foot measure
+green$RevPSF = green$Rent * green$leasing_rate / 100
+ggplot(green, aes(x = as.factor(green_rating), y = RevPSF), fill = green_rating) + 
+  geom_boxplot() + 
+  xlab("Green Rating") + 
+  ylab("Revenue per Square Foot") +
+  labs(title = "Comparing Revenue per Square Foot of Not Green v Green Buildings") +
+  scale_x_discrete(labels = c("Not Green", "Green")) +
+  coord_flip() +
+  stat_summary(aes(label=round(..y..,2)), fun = "mean", geom = "point", shape = 8, size = 2, color = "red")
+```
+
+As we can see from the graph above, the medians (black lines above from the box-plot) and means (red stars) of green and non-green building revenue per square foot are different. The "not green buildings" have a mean of \$24.50, while the green buildings have a mean of \$27.00. We can say that the average revenue for green buildings is slightly higher  
+
+
+### Visualizations
+
+
+```{r ,out.width=c('50%', '50%'), fig.show='hold', echo=FALSE}
+ggplot(data=gbuilds) + 
+  geom_point(mapping=aes(x=cluster_rent, y=Rent, colour=green_rating)) +
+  labs(x="Cluster Rent", y='Rent', title = 'Green buildings: Rent vs. Cluster Rent',
+       color='Green building')
+ggplot(data=gbuilds) + 
+  geom_point(mapping=aes(x=age, y=Rent, colour=green_rating))+
+  labs(x="Age", y='Rent', title = 'Green buildings: Rent vs. Age of the Building',
+       color='Green building')
+ggplot(data=gbuilds) + 
+  geom_point(mapping=aes(x=size, y=Rent, colour=green_rating)) +
+  labs(x="Size", y='Rent', title = 'Green buildings: Rent vs. Size of the Rental space in the building (square foot)',
+       color='Green building')
+ggplot(data=gbuilds) + 
+  geom_point(mapping=aes(x=age, y=Rent, colour=class_a))+
+  labs(x="Age", y='Rent', title = 'Class A: Age of the building vs. Rent',
+       color='Class A building')
+```
+
+### Inference
+  
+* There is a correlation between rent and the cluster rent
+* The size of the rental space in the building is also correlated with the Rent
+* A Class buildings appear to be younger
+* Age does not not seem to have a high correlation with rent 
+* Class A buildings have higher rent  
+
+
+```{r out.width=c('50%', '50%'), fig.show='hold', echo=FALSE}
+g = ggplot(gbuilds, aes(x=age))
+g + geom_density(aes(fill=factor(green_rating)), alpha=0.4)+
+  labs(x="Age", y='Density', title = 'Age Distribution',
+       fill='Green building')
+ggplot(gbuilds, aes(class_a, ..count..)) + geom_bar(aes(fill = green_rating), position = "dodge")+
+  labs(x="Class a", y='Number of buildings', title = 'Class A vs Green Buildings',
+       fill='Green building')
+g = ggplot(gbuilds, aes(x=size))
+g + geom_density(aes(fill=factor(green_rating)), alpha=0.4)+
+  labs(x="Size", y='Density', title = 'Size Distribution',
+       fill='Green building')
+medians <- aggregate(Rent ~  class_a, gbuilds, median)
+ggplot(data=gbuilds, aes(x=factor(class_a), y=Rent, fill=class_a)) + geom_boxplot()+
+  #stat_summary(fun.y=median, colour="darkred", geom="point", 
+   #            shape=18, size=3,show.legend = FALSE) + 
+  geom_text(data = medians, aes(label = Rent, y = Rent - 20)) +
+  labs(x="Class A", y='Rent', title = 'Class A vs Rent',
+       fill='Class A')
+```
+
+##  Capital Metro Data
+
+```{r p3, echo=FALSE, include=FALSE}
+
+library(MASS)
+library(ISLR)
+library(leaps)
+library(Matrix)
+library(foreach)
+library(mosaic)
+library(tidyverse)
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+set.seed(1)
+df <- read.csv("capmetro_UT.csv",header=TRUE)
+attach(df)
+```
+For each hours in a day, we look at the ridership.
+```{r p32, echo=FALSE}
+df$Total_ridership = abs(df$boarding) + abs(df$alighting)
+
+plot(df$hour_of_day, df$Total_ridership,main="Total Ridership Over A Day",
+     xlab="Hour Of Day", ylab="Ridership(max)", col = "blue")
+```
+From the plot we can see that the ridership were initially low at the beginning of a day (6am), as the commute time starts, which is around 7am - 10am, the ridership goes up fast. And then it starts to drop after 10 am, which most students have all gone to school. At 4pm, students are off school and the ridership increases till 6pm.
+
+Next, combine the month and day of month.
+```{r p33, echo=FALSE}
+df2 = transform(df, Combined_date=paste(df$day_of_week, df$month, sep="/"))
+
+# aggregate the number of delay times based on Date.
+rider_df = aggregate(df2$Total_ridership ~ df2$day_of_week+df2$month, data = df2, sum)
+rider_df
+rider_df2 = aggregate(df2$Total_ridership ~ df2$month, data = df2, sum)
+rider_df2
+combined_df = merge(rider_df, rider_df2, by = 'df2$month', sort = TRUE)
+combined_df
+
+rider_df = aggregate(df2$Total_ridership ~ df2$day_of_week, data = df2, sum)
+#rider_df
+names(rider_df)[1] <- "Days_of_week"
+names(rider_df)[2] <- "Total_ridership_week"
+options(scipen = 100)
+barplot(rider_df$Total_ridership_week~rider_df$Days_of_week, xlab = "Days of Week", ylab = "Total Ridership on Days of Week", col = "blue")
+#?barplot
+#plot(rider_df$`df2$day_of_week`, rider_df$`df2$Total_ridership`)
+rider_df2 = aggregate(df2$Total_ridership ~ df2$month, data = df2, sum)
+#rider_df2
+names(rider_df2)[1] <- "Month"
+names(rider_df2)[2] <- "Total_ridership_month"
+barplot(rider_df2$Total_ridership_month~rider_df2$Month, xlab = "Month", ylab = "Total Ridership on Month", col = "blue")
+```
+From the two bar plots we wouldn't say that there is obvious patterns on the three months we have. We can say that October has the highest total ridership while November has the lowest.But there is clearly a pattern on weekdays. Weekdays have much more riderships than weekends and Fridays have fewer ridership compare to other days. That might be some colleges, like us MSBA program, don't have lectures on Friday.
+
+```{r p34, echo=FALSE}
+rider_df3 = aggregate(df2$Total_ridership ~ df2$temperature, data = df2, sum)
+#rider_df3
+names(rider_df3)[1] <- "Temperature"
+names(rider_df3)[2] <- "Total_ridership_temperature"
+plot(rider_df3$Total_ridership_temperature~rider_df3$Temperature, xlab = "Temperature", ylab = "Total Ridership on Temperature", col = "blue")
+
+```
+There is no obvious pattern between temperature and total ridership.
+
+## Portfolio Modeling
+
+We built three different ETF-based portfolios for different investment strategy. For each portfolio, we'll use the last five years of day to day data to calculate the 5% value at risk using 20 trading day bootstrap re-sampling on a \$100,000 capital investment. Each of these portfolios is redistributed at the end of the day to maintain the stated portfolio weights. 
+
+### Portfolio 1: "In it for the long run"
+
+Portfolio 1 is built on the idea of tracking the S&P 500 movement. These ETFs are indicators of the entire market trends. Here's a breakdown of the portfolio:
+
+* **20% VOO** Vanguard 500 Index Fund, built to track the S&P 500
+
+* **20% VTWO** Vanguard Russell 2000 ETF, the next 2,000 diversified stocks after excluding the largest US public companies
+
+* **20% MGC** Vanguard Mega Cap ETF, diversified large blend domestic ETF
+
+* **20% SPYG** SPDR Portfolio S&P 500 Growth ETF, high growth large cap companies 
+
+* **20% VTI** Vanguard Total Stock Market ETF, built to track S&P 500, but more mid-cap exposure than VOO
+
+```{r, echo=FALSE}
+
+library(mosaic)
+library(quantmod)
+mystocks = c("VOO", "VTWO", "MGC", "SPYG", "VTI")
+myprices = getSymbols(mystocks, from = "2017-08-10")
+# A chunk of code for adjusting all stocks
+# creates a new object addind 'a' to the end
+# For example, WMT becomes WMTa, etc
+for(ticker in mystocks) {
+	expr = paste0(ticker, "a = adjustOHLC(", ticker, ")")
+	eval(parse(text=expr))
+}
+# Combine all the returns in a matrix
+all_returns = cbind(	ClCl(VOOa),
+								ClCl(VTWOa),
+								ClCl(MGCa),
+								ClCl(SPYGa),
+								ClCl(VTIa))
+#head(all_returns)
+all_returns = as.matrix(na.omit(all_returns))
+# Compute the returns from the closing prices
+pairs(all_returns)
+```
+
+From the pairing chart above, we can see that the earnings of each of these ETFs are highly correlated and have positive slopes. Thus, when one stock goes up, the others also go up, vise versa. This is the evidence that all of these ETFs are tracking market movement and largely moving in the same direction. 
+
+Let's take a look at the 20-day trading period of this portfolio. 
+
+```{r, echo=FALSE}
+# Sample a random return from the empirical joint distribution
+# This simulates a random day
+return.today = resample(all_returns, 1, orig.ids=FALSE)
+# Update the value of your holdings
+# Assumes an equal allocation to each asset
+total_wealth = 100000
+my_weights = c(0.2,0.2,0.2, 0.2, 0.2)
+holdings = total_wealth*my_weights
+holdings = holdings*(1 + return.today)
+set.seed(1)
+# Now simulate many different possible scenarios  
+initial_wealth = 100000
+sim1 = do(1000)*{
+	total_wealth = initial_wealth
+	weights = c(0.2, 0.2, 0.2, 0.2, 0.2)
+	holdings = weights * total_wealth
+	n_days = 20
+	wealthtracker = rep(0, n_days)
+	for(today in 1:n_days) {
+		return.today = resample(all_returns, 1, orig.ids=FALSE)
+		holdings = holdings + holdings*return.today
+		total_wealth = sum(holdings)
+		wealthtracker[today] = total_wealth
+	}
+	wealthtracker
+}
+#head(sim1)
+hist(sim1[,n_days], 25, main = "Portfolio 1 Bootstrapped Portfolio Values")
+# Profit/loss
+#mean(sim1[,n_days])
+hist(sim1[,n_days]- initial_wealth, breaks=30, main = "Portfolio 1 Bootstrapped Earnings")
+abline(v = (quantile(sim1[,n_days], 0.05) - initial_wealth), col = "red")
+# Calculate 5% value at risk
+quantile(sim1[,n_days], 0.05) - initial_wealth
+```
+
+As we look at the histogram for values and earnings, we see that negative earnings are a possibility. The 5% value at risk based on a 20-day bootstrapped period is **-\$8608.314** for this portfolio. 
+
+### Portfolio 2: "Thrive on Volatility" 
+
+Portfolio 2 is built on the idea of thriving off market volatility. These ETFs are designed to thrive in volatile market conditions by increasing their diversity. Here's a breakdown of the portfolio:
+
+* **25% QQQ** Invesco QQQ Trust, tracks the Nasdaq 100 index, dominated by big tech names
+
+* **25% BTAL** AGFiQ U.S. Market Neutral Anti-Beta Fund, profiting off a spread between high and low beta stocks, performing well when low beta stocks are in favor in stormy market conditions
+
+* **25% SDY** SPDR S&P Dividend ETF, focusing on dividend growth stocks. Dividends represent a safer return as firms will reduce buybacks before cutting dividends. 
+
+* **25% XLP** SPDR Consumer Staples Select Sector, tracks consumer household stable products like Walmart and Proctor and Gamble that will not fall significantly during volatile markets
+
+```{r, echo=FALSE}
+mystocks = c("QQQ", "BTAL", "SDY", "XLP")
+myprices = getSymbols(mystocks, from = "2017-08-10")
+# A chunk of code for adjusting all stocks
+# creates a new object addind 'a' to the end
+# For example, WMT becomes WMTa, etc
+for(ticker in mystocks) {
+	expr = paste0(ticker, "a = adjustOHLC(", ticker, ")")
+	eval(parse(text=expr))
+}
+# Combine all the returns in a matrix
+all_returns = cbind(	ClCl(QQQa),
+								ClCl(BTALa),
+								ClCl(SDYa),
+								ClCl(XLPa))
+#head(all_returns)
+all_returns = as.matrix(na.omit(all_returns))
+# Compute the returns from the closing prices
+pairs(all_returns)
+```
+
+From the pairs plot, we see that these four ETFs are much less strongly correlated than the ETFs in Portfolio 1. You got negative slop and positive slop in this portfolio. Thus, indicating that this portfolio to be "safer", not always going in the same direction. 
+
+Then, we simulate the 20-day trading period of this portfolio. 
+
+```{r, echo=FALSE}
+# Sample a random return from the empirical joint distribution
+# This simulates a random day
+return.today = resample(all_returns, 1, orig.ids=FALSE)
+# Update the value of your holdings
+# Assumes an equal allocation to each asset
+total_wealth = 100000
+my_weights = c(0.25,0.25,0.25,0.25)
+holdings = total_wealth*my_weights
+holdings = holdings*(1 + return.today)
+set.seed(1)
+# Now simulate many different possible scenarios  
+initial_wealth = 100000
+sim1 = do(1000)*{
+	total_wealth = initial_wealth
+	weights = c(0.25,0.25,0.25,0.25)
+	holdings = weights * total_wealth
+	n_days = 20
+	wealthtracker = rep(0, n_days)
+	for(today in 1:n_days) {
+		return.today = resample(all_returns, 1, orig.ids=FALSE)
+		holdings = holdings + holdings*return.today
+		total_wealth = sum(holdings)
+		wealthtracker[today] = total_wealth
+	}
+	wealthtracker
+}
+#head(sim1)
+hist(sim1[,n_days], 25, main = "Portfolio 2 Bootstrapped Portfolio Values")
+# Profit/loss
+#mean(sim1[,n_days])
+hist(sim1[,n_days]- initial_wealth, breaks=30, main = "Portfolio 2 Bootstrapped Earnings")
+abline(v = (quantile(sim1[,n_days], 0.05) - initial_wealth), col = "red")
+# Calculate 5% value at risk
+quantile(sim1[,n_days], 0.05) - initial_wealth
+```
+
+From the histograms of the portfolio values and earnings, we see that negative earnings are a possibility. The 5% value at risk based on a 20-day bootstrapped period is **-\$5229.9** for this portfolio. This portfolio earns higher compared to the portfolio that simply tracks the S&P 500 above.  
+
+## Portfolio 3: "Safety and Risk-Aversion with Bonds" 
+
+While Portfolio 2 was built on the idea of thriving off market volatility, Portfolio 3 attempts to avoid market volatility altogether. These "safe" ETFs are designed to withstand market volatility, but have a smaller potential return. Here's a breakdown of the portfolio:
+
+* **33% FBND** Fidelity Total Bond ETF, tracks Barclays US Universal Bond Index with diversified sector allocation
+
+* **33% BLV** Vanguard Long-Term Bond, tracks US government and corporate bonds that have maturities of greater than 10 years
+
+* **33% BSV** Vanguard Short-Term Bond, built 71% off AAA-rated bonds and 13% in bonds rated BBB.   
+
+```{r, echo=FALSE}
+mystocks = c("FBND", "BLV", "BSV")
+myprices = getSymbols(mystocks, from = "2017-08-10")
+# A chunk of code for adjusting all stocks
+# creates a new object addind 'a' to the end
+# For example, WMT becomes WMTa, etc
+for(ticker in mystocks) {
+	expr = paste0(ticker, "a = adjustOHLC(", ticker, ")")
+	eval(parse(text=expr))
+}
+# Combine all the returns in a matrix
+all_returns = cbind(ClCl(FBNDa),
+								ClCl(BLVa),
+								ClCl(BSVa))
+#head(all_returns)
+all_returns = as.matrix(na.omit(all_returns))
+# Compute the returns from the closing prices
+pairs(all_returns)
+```
+
+From the pairs correlation matrix, we see that these Bond ETFs are less correlated than the ETFs in Portfolio 1 but higher than Portfolio 2. 
+
+Then, we simulate the 20-day trading period of this portfolio.
+
+```{r, echo=FALSE}
+# Sample a random return from the empirical joint distribution
+# This simulates a random day
+return.today = resample(all_returns, 1, orig.ids=FALSE)
+# Update the value of your holdings
+# Assumes an equal allocation to each asset
+total_wealth = 100000
+my_weights = c((1/3),(1/3),(1/3))
+holdings = total_wealth*my_weights
+holdings = holdings*(1 + return.today)
+set.seed(1)
+# Now simulate many different possible scenarios  
+initial_wealth = 100000
+sim1 = do(1000)*{
+	total_wealth = initial_wealth
+	weights = c((1/3),(1/3),(1/3))
+	holdings = weights * total_wealth
+	n_days = 20
+	wealthtracker = rep(0, n_days)
+	for(today in 1:n_days) {
+		return.today = resample(all_returns, 1, orig.ids=FALSE)
+		holdings = holdings + holdings*return.today
+		total_wealth = sum(holdings)
+		wealthtracker[today] = total_wealth
+	}
+	wealthtracker
+}
+#head(sim1)
+hist(sim1[,n_days], 25, main = "Portfolio 3 Bootstrapped Portfolio Values")
+# Profit/loss
+#mean(sim1[,n_days])
+hist(sim1[,n_days]- initial_wealth, breaks=30, main = "Portfolio 3 Bootstrapped Earnings")
+abline(v = (quantile(sim1[,n_days], 0.05) - initial_wealth), col = "red")
+# Calculate 5% value at risk
+quantile(sim1[,n_days], 0.05) - initial_wealth
+```
+From the histograms of the portfolio values and earnings, we see that negative earnings are **still** a possibility. The 5% value at risk based on a 20-day bootstrapped period is **-\$2,925.045** for this portfolio. This is a much "safer" portfolio compared to **both** Portfolio 1 and Portfolio 2. 
+
+### In summary
+
+* Portfolio 1 is best suited for longer-term investment. (In fact, some of these ETFs are in our team's own IRA portfolios.) The 5% VaR is the lowest at **-\$8,608.314**
+
+* Portfolio 2 is a better short-term risk fund. Instead of simply tracking the market, it attempts to hedge against market volatility in other ways. These strategies include focusing on high-value tech firms, dividend funds, consumer staples, and low beta stocks. It increases VaR to **-\$5,229.9**. 
+
+* Portfolio 3 is the best short-term risk fund as it increases VaR further to **-\$2,925.045**. Because it is based on more stable bond indexes, this means that the Value at Risk is higher than the previous two portfolios.
+
+For those most risk-averse investors over a 20-day trading period, Portfolio 3 is the safest choice. Over a longer trading period, investors may be more likely to choose the portfolios that track the S&P 500 or thrive off market volatility in the long run. 
+
+
+## Clustering and PCA
+
+
+## Market segmentation
+
+
+In our Datase, we observe the following:
+
+- _X_ column is essentialy the Turk's ID. Thus, this column has been set as the row index and dropped consequently
+- Mean-normalised all columns and scaled them to a 0-1 to make the measurements comparable.
+
+```{r, echo=FALSE}
+# clustering
+# principal component analysis
+NH20 <- read.csv("social_marketing.csv")
+length(unique(NH20$X)) == dim(NH20)[1]
+# TRUE. Thus X column is the ID
+row.names(NH20) <- NH20$X
+NH20 <- NH20[,-1]
+columns <- colnames(NH20)
+NH20 <- data.frame(NH20)
+NH20 <- scale(NH20)
+```
+
+
+
+### Elbow method
+
+```{r, echo=FALSE}
+#Elbow Method for finding the optimal number of clusters
+# Compute and plot wss for k = 2 to k = 15.
+k.max <- 25
+wss <- sapply(1:k.max, 
+              function(k){kmeans(NH20, k, nstart=5,iter.max = 1000 )$tot.withinss})
+plot(1:k.max, wss,
+     type="b", pch = 19, frame = FALSE, 
+     xlab="Number of clusters K",
+     ylab="Total within-clusters sum of squares")
+
+```
+The Elbow Plot above indicates a kink at _**K = 14**_. This could be a good estimate of the number of clusters we are going to choose.
+
+
+### Running K-Means with 14 clusters
+```{r, echo=FALSE}
+# Run k-means with 215 clusters and 25 starts
+clust1 = kmeans(NH20, k.max, nstart=25, iter.max = 1000)
+
+```
+
+```{r, echo=FALSE}
+# A few plots with cluster membership shown
+# qplot is in the ggplot2 library
+qplot(NH20[,"religion"], xlab = "Religion",
+      NH20[,"sports_fandom"], y_lab = "Sports Fandom",
+      color=factor(clust1$cluster))
+qplot(NH20[,"politics"], xlab = "Politics",
+      NH20[,"news"], y_lab = "News",
+      color=factor(clust1$cluster))
+# Compare versus within-cluster average distances from the first run
+cat("\nCluster Whithinness:",paste(clust1$withinss))
+cat("\nTotal Whithinness:",paste(clust1$tot.withinss))
+cat("\nCluster Betweenness:",paste(clust1$betweenss))
+```
+
+## The Reuters corpus
+In order to predict the author of an article on the basis of the article's textual content, we had to first build a training model to give a baseline dictionary to predict "new" testing articles. 
+
+First, we read in the 50 training articles for each of the 50 different authors. Then set training Corpus.
+```{r, echo=FALSE}
+
+library(NLP)
+library(tm)
+
+library(tidyverse)
+library(slam)
+
+library(proxy)
+# reader function used in class
+readerPlain = function(fname){
+				readPlain(elem=list(content=readLines(fname)), 
+							id=fname, language='en') }
+
+# expand all file paths in training data
+train = Sys.glob('ReutersC50/C50train/*')
+# initiate empty lists to be used in for loop
+trainingArticles = NULL
+labels = NULL
+# read in all training articles
+for (name in train) {
+  author = substring(name, first=21) # set author name
+  print(author)
+  article = Sys.glob(paste0(name,'/*.txt')) # expand articles for each name
+  trainingArticles = append(trainingArticles,article) # append articles to list
+  labels = append(labels, rep(author, length(article))) # append labels to list
+}
+# read all the plain text files in the list
+combined = lapply(trainingArticles,readerPlain)
+# set article names
+names(combined) = trainingArticles
+names(combined) = sub('.txt','',names(combined))
+# creates the corpus
+trainCorpus = Corpus(VectorSource(combined))
+summary(trainCorpus)
+```
+
+After reading in the data, we pre-processed the text in the articles. 
+* Converting all text to lowercase
+* Remove numbers
+* Remove punctuation
+* Remove excess white space
+
+```{r, echo=FALSE}
+trainArticles = trainCorpus %>%
+  tm_map(content_transformer(tolower))  %>%             # make everything lowercase
+  tm_map(content_transformer(removeNumbers)) %>%        # remove numbers
+  tm_map(content_transformer(removePunctuation)) %>%    # remove punctuation
+  tm_map(content_transformer(stripWhitespace))          # remove excess white-space
+DTM_train = DocumentTermMatrix(trainArticles)
+DTM_train
+trainArticles = tm_map(trainArticles, content_transformer(removeWords), stopwords("en"))
+DTM_train = DocumentTermMatrix(trainArticles)
+DTM_train
+DTM_train = removeSparseTerms(DTM_train, .99)
+DTM_train
+DTM_train = weightTfIdf(DTM_train)
+DTM_train <- as.matrix(DTM_train)
+```
+
+After these four steps, we're down to **2500 documents** with **32,669 terms.** 
+* Remove stop and filler words, based on the "basic English" stop words
+
+After removing filler words, we're down to **32,570 terms.** 
+* Removed words that have count 0 in > 99% of documents
+
+Thus cuts the long tail significantly to only **3393 terms.**
+* Finally, we converted the raw counts of words in each document to TF-IDF weights.
+
+**Then, we replicated the same process to read in the 50 testing articles for the authors. There are 3448 terms in the testing data, compared to only 3393 terms in the training data. We will deal with this in the later procedure.**
+
+```{r, echo=FALSE}
+# expand all file paths in training data
+test = Sys.glob('../data/ReutersC50/C50test/SimonCowell/*.txt')
+# initiate empty lists to be used in for loop
+testingArticles = NULL
+labels_test = NULL
+# read in all training articles
+for (name in test) {
+  author = substring(name, first=20) # set author name
+  article = Sys.glob(paste0(name,'/*.txt')) # expand articles for each name
+  testingArticles = append(testingArticles,article) # append articles to list
+  labels_test = append(labels_test, rep(author, length(article))) # append labels to list
+}
+# read all the plain text files in the list
+combined = lapply(testingArticles,readerPlain)
+# set article names
+names(combined) = testingArticles
+names(combined) = sub('.txt','',names(combined))
+# creates the corpus
+testCorpus = Corpus(VectorSource(combined))
+```
+
+For the testing data, we did the same pre-processing steps as the training data.
+
+```{r, echo=FALSE}
+testArticles = testCorpus %>%
+  tm_map(content_transformer(tolower))  %>%             # make everything lowercase
+  tm_map(content_transformer(removeNumbers)) %>%        # remove numbers
+  tm_map(content_transformer(removePunctuation)) %>%    # remove punctuation
+  tm_map(content_transformer(stripWhitespace))          # remove excess white-space
+DTM_test = DocumentTermMatrix(testArticles)
+DTM_test
+testArticles = tm_map(testArticles, content_transformer(removeWords), stopwords("en"))
+DTM_test = DocumentTermMatrix(testArticles)
+DTM_test
+DTM_test = removeSparseTerms(DTM_test, .99)
+DTM_test
+DTM_test = weightTfIdf(DTM_test)
+DTM_test <- as.matrix(DTM_test)
+```
+
+**We ignored words that are in the testing set and but not in the training set as below** 
+
+```{r, echo=FALSE}
+#forces test to take only identical col names as train
+DTM_test = DocumentTermMatrix(testArticles, list(dictionary=colnames(DTM_train)))
+DTM_test = weightTfIdf(DTM_test)
+DTM_test
+DTM_test <- as.matrix(DTM_test)
+```
+
+This removes the 55 "new" terms from the training data, less than 2% of the training terms. After this procedure, both of the training and testing groups have 3393 terms.
+
+We now use PCA to simplify the predictors.
+* We remove columns that have zero entries.
+* We use only intersecting columns of the train and testing data.
+
+```{r, echo=FALSE}
+DTM_train <- DTM_train[,which(colSums(DTM_train) != 0)]
+DTM_test <- DTM_test[,which(colSums(DTM_test) != 0)]
+DTM_train = DTM_train[,intersect(colnames(DTM_test),colnames(DTM_train))]
+DTM_test = DTM_test[,intersect(colnames(DTM_test),colnames(DTM_train))]
+```
+
+PCA process:
+
+```{r, echo=FALSE}
+pca = prcomp(DTM_train, scale =TRUE) #scale the data
+predictions = predict(pca, newdata = DTM_test)
+plot(cumsum(pca$sdev^2/sum(pca$sdev^2)), ylab = 'Cumulative variance explained', xlab = 'Number of principal components', main = 'Summary of Principal Component Variance Analysis')
+#lets stop at 1000 principal components
+#reformat the data
+train = data.frame(pca$x[,1:1000])
+train['author']=labels
+train_load = pca$rotation[,1:1000]
+test <- scale(DTM_test) %*% train_load
+test <- as.data.frame(test)
+test['author']=labels_test
+```
+
+We stop at 1000 principal components because it already can explain 80% of the variance.
+
+We now can move on to the models. We chose to Naive Bayes and Random Forest to do so.
+
+### Random Forest
+
+The random forest model was ran with the maximum number of trees equal to six. 
+
+```{r, echo=FALSE}
+library(randomForest)
+set.seed(1)
+mod_rand<-randomForest(as.factor(author)~.,data=train, mtry=6,importance=TRUE)
+pre_rand<-predict(mod_rand,data=test)
+tab_rand<-as.data.frame(table(pre_rand,as.factor(test$author)))
+predicted<-pre_rand
+actual<-as.factor(test$author)
+temp<-as.data.frame(cbind(actual,predicted))
+temp$flag<-ifelse(temp$actual==temp$predicted,1,0)
+sum(temp$flag)/nrow(temp)
+```
+
+
+The Random Forest accuracy is 71.9%.
+
+### Naive Bayes
+
+We then used a Naive Bayes model to predict the testing data from a training data. 
+
+```{r, echo=FALSE}
+library('e1071')
+mod_naive=naiveBayes(as.factor(author)~.,data=train)
+pred_naive=predict(mod_naive,test)
+library(caret)
+predicted_nb=pred_naive
+actual_nb=as.factor(test$author)
+temp_nb<-as.data.frame(cbind(actual_nb,predicted_nb))
+temp_nb$flag<-ifelse(temp_nb$actual_nb==temp_nb$predicted_nb,1,0)
+sum(temp_nb$flag)/nrow(temp_nb)
+#31.4% accuracy
+```
+The Naive Bayes accuracy is 31.4%. Disaster! Perhaps the terms are not independent.
+
+**In summary, the random forest model has the highest classification accuracy of about ~72% on the testing dataset.**
+
+## Association rule mining
+
+```{r, echo=FALSE}
+
+file <- "https://raw.githubusercontent.com/jgscott/STA380/master/data/groceries.txt"
+library(reshape)
+melt(iris)
+library(tidyverse)
+library(arules)  # has a big ecosystem of packages built around it
+library(arulesViz)
+df <- read.table(file, sep = ',', header = FALSE, fill = TRUE)
+list(names(df))
+# Preprocessing data
+
+dfid <- tibble::rowid_to_column(df, "User")
+df2 <- melt(dfid, id.vars = c("User"))
+df2$variable <- NULL
+attach(df2)
+df2 <- df2[order(User),]
+detach(df2)
+df2 <- df2[!apply(df2 == "", 1, any),]
+str(df2)
+summary(df2)
+# Barplot of top 20 items
+# the dot (.) means "plug in the argument coming from the left"
+summary(df2$value, maxsum=Inf)
+#sort(df2$value, decreasing=TRUE)
+#head(df2$value, 20)
+frq = table(df2$value)
+dffrq = as.data.frame(frq)
+dffrq <- dffrq[-c(1),]
+# sort
+attach(dffrq)
+dffrq <- dffrq[order(-Freq),]
+barplot(dffrq$Freq[1:20], names=dffrq$Var1[1:20], las=2, cex.names=0.6)
+detach(dffrq)
+```
+
+
+
+
+```{r, echo=FALSE}
+# Turn user into a factor
+df2$User = factor(df2$User)
+# Split
+grocs = split(x=df2$value, f=df2$User)
+# Remove dupes
+grocs = lapply(grocs, unique)
+# Cast as "transactions"
+grocstrans = as(grocs, "transactions")
+summary(grocstrans)
+# Now run the 'apriori' algorithm
+# Look at rules with support > .005 & confidence >.1 & length (# artists) <= 5
+grocrules = apriori(grocstrans, 
+                     parameter=list(support=.005, confidence=.1, maxlen=5))
+# Look at the output... so many rules!
+#inspect(grocrules)
+## Choose a subset
+inspect(subset(grocrules, subset=lift > 3.5))
+inspect(subset(grocrules, subset=confidence > 0.3))
+inspect(subset(grocrules, subset=lift > 2.5 & confidence > 0.3))
+# Plot
+plot(grocrules)
+# can swap the axes and color scales
+plot(grocrules, measure = c("support", "lift"), shading = "confidence")
+# "two key" plot: coloring is by size (order) of item set
+plot(grocrules, method='two-key plot')
+# can now look at subsets driven by the plot
+inspect(subset(grocrules, support > 0.035))
+inspect(subset(grocrules, confidence > 0.7))
+# graph-based visualization
+sub1 = subset(grocrules, subset=confidence > 0.01 & support > 0.005)
+summary(sub1)
+plot(sub1, method='graph')
+#?plot.rules
+plot(head(sub1, 25, by='lift'), method='graph', cex = 0.7)
+# export
+saveAsGraph(head(grocrules, n = 1000, by = "lift"), file = "grocrules.graphml")
+```
+
+For lift>3.5, we see that their are 5 items. They each are **(Onions, root vegetables), (beef, root vegetables), (root vegetables, beef), (pip fruit, tropical fruit), (tropical fruit, pip fruit)**. This shows that the pairs have strong relationship! We also can see that by ignoring the duplicates, there left only three pairs (Onions, root vegetables), (beef, root vegetables) and (tropical fruit, pip fruit).
+
+If we also take a look at the those that have confidence amount higher that support amount, it shows that these items are more likely to be complementary goods.
+
+
+
+
+
+
+
